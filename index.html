@@ -1,0 +1,432 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Travel Backbone (Cloud)</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@300;400;500;700&display=swap" rel="stylesheet">
+    
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        'jp-bg': '#f9f7f2',
+                        'jp-text': '#2b2b2b',
+                        'jp-accent': '#6f886f',
+                        'jp-blue': '#4a5c7a',
+                    },
+                    fontFamily: { sans: ['"Noto Sans JP"', 'sans-serif'] }
+                }
+            }
+        }
+    </script>
+    <style>
+        body { background-color: #f2f2f2; font-family: 'Noto Sans JP', sans-serif; -webkit-tap-highlight-color: transparent; }
+        .app-container { max-width: 480px; margin: 0 auto; background-color: #f9f7f2; min-height: 100vh; position: relative; padding-bottom: 80px; }
+        .highlight-tag { display: inline-block; padding: 2px 8px; border-radius: 4px; font-size: 0.75rem; margin-right: 4px; font-weight: 500; }
+        .tag-must-eat { background-color: #fff0f0; color: #d66a6a; border: 1px solid #fadcdc; }
+        .tag-booking { background-color: #f0f4ff; color: #4a5c7a; border: 1px solid #dce4fa; }
+        #google-map-container { height: 250px; width: 100%; border-radius: 12px; margin-bottom: 1rem; display: none; }
+        
+        /* Modal Styles */
+        .modal { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); z-index: 100; display: flex; align-items: center; justify-content: center; backdrop-filter: blur(2px); }
+        .modal-content { background: white; width: 90%; max-width: 400px; max-height: 80vh; overflow-y: auto; padding: 20px; border-radius: 15px; box-shadow: 0 10px 25px rgba(0,0,0,0.2); }
+    </style>
+</head>
+<body>
+
+<div class="app-container" id="app">
+    
+    <section id="view-home" class="p-6">
+        <div class="flex justify-between items-center mb-6 mt-4">
+            <h1 class="text-2xl font-bold text-jp-text tracking-widest">私の旅 <br><span class="text-sm font-normal text-gray-400">Cloud Library</span></h1>
+            <button onclick="openEditor()" class="bg-jp-text text-white w-10 h-10 rounded-full shadow-lg hover:bg-gray-700 transition"><i class="fas fa-plus"></i></button>
+        </div>
+        <div id="trip-list" class="space-y-4">
+            <div class="text-center text-gray-400 py-10"><i class="fas fa-circle-notch fa-spin"></i> Loading Trips...</div>
+        </div>
+    </section>
+
+    <section id="view-trip" class="hidden">
+        <header class="sticky top-0 z-40 bg-jp-bg/95 backdrop-blur-sm px-6 py-4 border-b border-gray-100 flex justify-between items-center">
+            <div onclick="goHome()" class="cursor-pointer">
+                <i class="fas fa-chevron-left text-gray-400 mr-2"></i>
+                <span class="text-xl font-bold text-jp-text tracking-widest" id="header-title"></span>
+            </div>
+            <div class="flex gap-3 items-center">
+                <button onclick="openEditor(currentTrip)" class="text-gray-400 hover:text-jp-text"><i class="fas fa-pen"></i></button>
+                <div id="weather-widget" class="text-jp-accent flex flex-col items-end text-xs"></div>
+            </div>
+        </header>
+
+        <main id="tab-content-itinerary" class="p-4 space-y-6">
+            <div id="google-map-container" class="bg-gray-200"></div>
+            
+            <div class="flex justify-between items-center mb-2">
+                <h2 class="text-sm font-bold text-gray-400" id="header-date"></h2>
+                <div class="flex gap-2">
+                    <button onclick="downloadICS()" class="text-xs bg-jp-accent text-white px-3 py-1 rounded-full shadow-sm">
+                        <i class="fas fa-calendar-check mr-1"></i> Sync All
+                    </button>
+                    <button onclick="toggleMap()" class="text-xs bg-white border border-gray-300 px-3 py-1 rounded-full text-jp-text shadow-sm">
+                        <i class="fas fa-map-marked-alt mr-1"></i> Map
+                    </button>
+                </div>
+            </div>
+
+            <div id="itinerary-list" class="space-y-8"></div>
+        </main>
+
+        <main id="tab-content-tools" class="p-4 space-y-4 hidden">
+            <div id="tools-container" class="space-y-4"></div>
+        </main>
+
+        <nav class="fixed bottom-0 left-0 right-0 max-w-[480px] mx-auto bg-white border-t border-gray-200 px-6 py-3 flex justify-between items-center text-xs text-gray-400 z-50">
+            <button onclick="switchTab('itinerary')" id="btn-tab-itinerary" class="flex flex-col items-center gap-1 text-jp-accent"><i class="fas fa-list-ul text-xl"></i><span>行程</span></button>
+            <button onclick="switchTab('tools')" id="btn-tab-tools" class="flex flex-col items-center gap-1 hover:text-jp-accent"><i class="fas fa-suitcase text-xl"></i><span>工具</span></button>
+        </nav>
+    </section>
+</div>
+
+<div id="editor-modal" class="modal hidden">
+    <div class="modal-content">
+        <h2 class="text-lg font-bold mb-4">Edit Trip (JSON Mode)</h2>
+        <p class="text-xs text-gray-500 mb-2">為了最大彈性，請直接編輯 JSON 資料。請小心格式。</p>
+        <textarea id="json-editor" class="w-full h-64 border p-2 text-xs font-mono bg-gray-50 rounded mb-4" spellcheck="false"></textarea>
+        <div class="flex justify-end gap-3">
+            <button onclick="closeEditor()" class="px-4 py-2 rounded text-gray-500 hover:bg-gray-100">Cancel</button>
+            <button onclick="saveTripData()" class="px-4 py-2 rounded bg-jp-text text-white font-bold">Save</button>
+        </div>
+        <div class="mt-4 border-t pt-4">
+            <button onclick="deleteTrip()" class="text-red-400 text-xs w-full text-center">Delete Trip</button>
+        </div>
+    </div>
+</div>
+
+<script type="module">
+    // --- 1. FIREBASE SETUP ---
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
+    import { getFirestore, collection, addDoc, doc, updateDoc, deleteDoc, onSnapshot } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
+
+    // TODO: 填入您的 Firebase Config
+    const firebaseConfig = {
+        // 在 Firebase Console > Project Settings > General > SDK setup and configuration 找到這些
+        apiKey: "YOUR_FIREBASE_API_KEY",
+        authDomain: "YOUR_PROJECT_ID.firebaseapp.com",
+        projectId: "YOUR_PROJECT_ID",
+        storageBucket: "YOUR_PROJECT_ID.appspot.com",
+        messagingSenderId: "...",
+        appId: "..."
+    };
+
+    const app = initializeApp(firebaseConfig);
+    const db = getFirestore(app);
+    const tripsCollection = collection(db, "trips");
+
+    // API KEYS
+    const GOOGLE_MAPS_KEY = 'YOUR_GOOGLE_MAPS_KEY'; 
+    const WEATHER_API_KEY = 'YOUR_OPENWEATHER_KEY';
+
+    // --- 2. GLOBAL STATE ---
+    window.currentTrip = null;
+    window.currentTripId = null;
+    window.map = null;
+    window.markers = [];
+    let unsubscribe = null; // Listener killer
+
+    // --- 3. CORE FUNCTIONS ---
+    
+    // Load Trips (Real-time Listener)
+    window.initApp = function() {
+        onSnapshot(tripsCollection, (snapshot) => {
+            const list = document.getElementById('trip-list');
+            list.innerHTML = '';
+            snapshot.forEach(doc => {
+                const trip = doc.data();
+                const div = document.createElement('div');
+                div.className = `bg-white p-5 rounded-xl shadow-sm border-l-8 ${trip.coverColor || 'bg-gray-400'} cursor-pointer hover:shadow-md transition`;
+                div.innerHTML = `
+                    <h2 class="text-xl font-bold text-gray-800">${trip.title}</h2>
+                    <p class="text-sm text-gray-500 mt-1"><i class="far fa-calendar-alt"></i> ${trip.dateRange}</p>
+                    <div class="mt-3 flex gap-2">
+                        <span class="text-xs bg-gray-100 px-2 py-1 rounded text-gray-600">${trip.days ? trip.days.length : 0} Days</span>
+                        <span class="text-xs bg-gray-100 px-2 py-1 rounded text-gray-600">${trip.city}</span>
+                    </div>
+                `;
+                div.onclick = () => loadTrip(doc.id, trip);
+                list.appendChild(div);
+            });
+            if(snapshot.empty) list.innerHTML = '<div class="text-center py-10">No trips found. Click + to add one.</div>';
+        });
+
+        // Load Maps Script
+        if(GOOGLE_MAPS_KEY && GOOGLE_MAPS_KEY !== 'YOUR_GOOGLE_MAPS_KEY') {
+            const script = document.createElement('script');
+            script.src = `https://maps.googleapis.com/maps/api/js?key=${GOOGLE_MAPS_KEY}&callback=initMapFunc`;
+            script.async = true;
+            document.head.appendChild(script);
+        }
+    }
+
+    // Enter Trip View
+    window.loadTrip = function(id, tripData) {
+        window.currentTrip = tripData;
+        window.currentTripId = id;
+        
+        document.getElementById('view-home').classList.add('hidden');
+        document.getElementById('view-trip').classList.remove('hidden');
+        
+        document.getElementById('header-title').innerText = tripData.title;
+        document.getElementById('header-date').innerText = tripData.dateRange;
+
+        fetchWeather(tripData.city);
+        renderItinerary();
+        renderTools();
+    }
+
+    window.goHome = function() {
+        document.getElementById('view-home').classList.remove('hidden');
+        document.getElementById('view-trip').classList.add('hidden');
+        window.currentTrip = null;
+        window.currentTripId = null;
+    }
+
+    // Render Logic
+    window.renderItinerary = function() {
+        const container = document.getElementById('itinerary-list');
+        container.innerHTML = '';
+        
+        if(!currentTrip.days) return;
+
+        currentTrip.days.forEach(day => {
+            let eventsHtml = '';
+            day.events.forEach(event => {
+                let icon = event.type === 'spot' ? 'fa-torii-gate text-jp-blue' : 
+                           event.type === 'food' ? 'fa-utensils text-jp-accent' : 'fa-train text-gray-500';
+                
+                let desc = event.desc
+                    .replace(/(必吃[^。，]*|必買[^。，]*)/g, '<span class="highlight-tag tag-must-eat">$1</span>')
+                    .replace(/(預約[^。，]*)/g, '<span class="highlight-tag tag-booking">$1</span>');
+
+                eventsHtml += `
+                    <div class="relative bg-white p-4 rounded-xl shadow-sm border-b border-gray-50 mb-3">
+                        <div class="flex justify-between items-start">
+                            <div class="flex items-center gap-2 mb-2">
+                                <span class="text-xs font-mono font-bold bg-gray-100 px-2 py-0.5 rounded text-gray-600">${event.time}</span>
+                                <i class="fas ${icon}"></i>
+                            </div>
+                            <a href="https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(event.title)}" target="_blank" class="text-gray-300 hover:text-blue-500"><i class="fas fa-location-arrow text-lg"></i></a>
+                        </div>
+                        <h3 class="text-base font-bold text-jp-text">${event.title}</h3>
+                        <p class="text-sm text-gray-600 mt-1 leading-relaxed">${desc}</p>
+                    </div>
+                `;
+            });
+
+            container.innerHTML += `
+                <div>
+                    <div class="flex items-center gap-2 mb-3 pl-1">
+                        <span class="bg-gray-800 text-white px-3 py-1 rounded-lg text-xs font-bold">${day.day}</span>
+                        <span class="text-sm font-bold text-gray-600">${day.location}</span>
+                        <span class="text-xs text-gray-400 ml-auto">${day.date}</span>
+                    </div>
+                    <div class="pl-2 border-l-2 border-gray-200 ml-3 space-y-4 pb-4">${eventsHtml}</div>
+                </div>
+            `;
+        });
+    }
+
+    // --- 4. EDITOR LOGIC (JSON MODE) ---
+    // 這是最簡單也最強大的編輯方式，可以直接複製貼上整段行程
+    window.openEditor = function(trip = null) {
+        const modal = document.getElementById('editor-modal');
+        const textarea = document.getElementById('json-editor');
+        modal.classList.remove('hidden');
+
+        if(trip) {
+            // Editing existing
+            textarea.value = JSON.stringify(trip, null, 2);
+        } else {
+            // New Template
+            const template = {
+                title: "New Trip",
+                dateRange: "202X.XX.XX",
+                city: "CityName",
+                coverColor: "bg-blue-400",
+                flight: { out: "", in: "", ticket: "" },
+                hotel: { name: "", address: "", mapQuery: "" },
+                days: [
+                    {
+                        day: "Day 1", date: "MM/DD", location: "Area",
+                        events: [ { type: "spot", time: "10:00", title: "Spot Name", desc: "Description", lat: 0, lng: 0 } ]
+                    }
+                ]
+            };
+            textarea.value = JSON.stringify(template, null, 2);
+            window.currentTripId = null; // Mark as new
+        }
+    }
+
+    window.closeEditor = function() {
+        document.getElementById('editor-modal').classList.add('hidden');
+    }
+
+    window.saveTripData = async function() {
+        const textarea = document.getElementById('json-editor');
+        try {
+            const newData = JSON.parse(textarea.value);
+            
+            if(window.currentTripId) {
+                // Update
+                await updateDoc(doc(db, "trips", window.currentTripId), newData);
+                // Note: onSnapshot will auto-update the UI, but we need to update current view if open
+                if(window.currentTrip) loadTrip(window.currentTripId, newData);
+            } else {
+                // Create
+                await addDoc(tripsCollection, newData);
+            }
+            closeEditor();
+            alert("Saved successfully!");
+        } catch(e) {
+            alert("Error: JSON format invalid or Network issue.\n" + e.message);
+        }
+    }
+
+    window.deleteTrip = async function() {
+        if(!window.currentTripId) return;
+        if(confirm("Are you sure you want to delete this trip?")) {
+            await deleteDoc(doc(db, "trips", window.currentTripId));
+            closeEditor();
+            goHome();
+        }
+    }
+
+    // --- 5. "SYNC ALL" to Calendar (ICS Generator) ---
+    window.downloadICS = function() {
+        if(!currentTrip || !currentTrip.days) return;
+
+        let icsContent = "BEGIN:VCALENDAR\nVERSION:2.0\nPRODID:-//MyTravelApp//EN\nCALSCALE:GREGORIAN\nMETHOD:PUBLISH\n";
+        
+        // 取得年份 (假設 dateRange 格式 "2026.04.10...")
+        const year = currentTrip.dateRange.substring(0, 4);
+
+        currentTrip.days.forEach(day => {
+            const [month, date] = day.date.split('/');
+            // 格式化日期字串 YYYYMMDD
+            const dateStr = `${year}${month.padStart(2,'0')}${date.padStart(2,'0')}`;
+
+            day.events.forEach(event => {
+                // 處理時間 13:00 -> 130000
+                const [hh, mm] = event.time.split(':');
+                const startStr = `${dateStr}T${hh}${mm}00`;
+                
+                // 預設活動 1 小時
+                let endH = parseInt(hh) + 1;
+                const endStr = `${dateStr}T${endH.toString().padStart(2,'0')}${mm}00`;
+
+                icsContent += "BEGIN:VEVENT\n";
+                icsContent += `SUMMARY:${event.title}\n`;
+                icsContent += `DTSTART:${startStr}\n`;
+                icsContent += `DTEND:${endStr}\n`;
+                icsContent += `DESCRIPTION:${event.desc}\n`;
+                icsContent += `LOCATION:${event.title}\n`;
+                icsContent += "STATUS:CONFIRMED\n";
+                icsContent += "END:VEVENT\n";
+            });
+        });
+
+        icsContent += "END:VCALENDAR";
+
+        // 觸發下載
+        const blob = new Blob([icsContent], { type: 'text/calendar;charset=utf-8' });
+        const link = document.createElement('a');
+        link.href = window.URL.createObjectURL(blob);
+        link.setAttribute('download', `${currentTrip.title}.ics`);
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+    }
+
+    // --- 6. WEATHER & MAP & TOOLS ---
+    window.fetchWeather = async function(city) {
+        const widget = document.getElementById('weather-widget');
+        if(!WEATHER_API_KEY || WEATHER_API_KEY.includes('YOUR')) {
+            widget.innerHTML = 'No API Key'; return;
+        }
+        try {
+            const res = await fetch(`https://api.openweathermap.org/data/2.5/weather?q=${city}&units=metric&appid=${WEATHER_API_KEY}&lang=zh_tw`);
+            const data = await res.json();
+            if(data.cod === 200) {
+                widget.innerHTML = `<span class="text-xl font-bold">${Math.round(data.main.temp)}°C</span><span>${data.weather[0].description}</span>`;
+            }
+        } catch(e) {}
+    }
+
+    window.toggleMap = function() {
+        const mapContainer = document.getElementById('google-map-container');
+        const isHidden = mapContainer.style.display === 'none' || mapContainer.style.display === '';
+        
+        if (isHidden) {
+            mapContainer.style.display = 'block';
+            if (!window.map && window.google) {
+                const firstPoint = currentTrip.days[0].events.find(e => e.lat) || {lat: 35.0116, lng: 135.7681};
+                window.map = new google.maps.Map(mapContainer, {
+                    center: { lat: firstPoint.lat, lng: firstPoint.lng }, zoom: 12, disableDefaultUI: true
+                });
+            }
+            updateMapMarkers();
+        } else {
+            mapContainer.style.display = 'none';
+        }
+    }
+
+    window.updateMapMarkers = function() {
+        if(!window.map) return;
+        window.markers.forEach(m => m.setMap(null));
+        window.markers = [];
+        currentTrip.days.forEach(day => {
+            day.events.forEach(e => {
+                if(e.lat && e.lng) {
+                    const marker = new google.maps.Marker({
+                        position: { lat: e.lat, lng: e.lng },
+                        map: window.map, title: e.title
+                    });
+                    window.markers.push(marker);
+                }
+            });
+        });
+    }
+    
+    // Tools Placeholder
+    window.initMapFunc = function() {}; 
+    window.renderTools = function() {
+        if(!currentTrip) return;
+        const t = document.getElementById('tools-container');
+        t.innerHTML = `
+            <div class="bg-white p-4 rounded-xl shadow-sm border-l-4 border-jp-blue">
+                <h3 class="font-bold text-jp-blue mb-2"><i class="fas fa-plane"></i> 航班</h3>
+                <div class="text-sm text-gray-600">
+                    <div>去: ${currentTrip.flight?.out || '-'}</div>
+                    <div>回: ${currentTrip.flight?.in || '-'}</div>
+                </div>
+            </div>`;
+    }
+
+    window.switchTab = function(tab) {
+        document.getElementById('tab-content-itinerary').classList.add('hidden');
+        document.getElementById('tab-content-tools').classList.add('hidden');
+        document.getElementById('btn-tab-itinerary').classList.remove('text-jp-accent');
+        document.getElementById('btn-tab-tools').classList.remove('text-jp-accent');
+        document.getElementById(`tab-content-${tab}`).classList.remove('hidden');
+        document.getElementById(`btn-tab-${tab}`).classList.add('text-jp-accent');
+    }
+
+    // Initialize
+    initApp();
+
+</script>
+</body>
+</html>
