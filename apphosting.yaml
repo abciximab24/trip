@@ -1,0 +1,8 @@
+# apphosting.yaml
+serviceId: ryokou-app
+runtime: nodejs20
+env:
+  - name: NEXT_PUBLIC_GOOGLE_MAPS_KEY
+    value: "AIzaSyAogyVOQzfb5DF4vBWbQbZmvOiM6WkX2io" # 這裡也可以之後在 Console 設定
+  - name: NEXT_PUBLIC_WEATHER_KEY
+    value: "bd91ec6d74f6f90587f0e87c6b5b54a6"
