@@ -17,13 +17,28 @@ interface Trip {
   members: Member[];
    memberEmails: string[];
   days: Day[];
-  flight?: { out: string; in: string };
+  flight?: { out?: string; in?: string; outTime?: string; inTime?: string };
   hotel?: { name: string; address: string };
   checkInDate?: string;
   checkOutDate?: string;
   currencyRates?: { from: string; to: string; rate: number }[];
   bills?: { amount: number; currency: string; description: string; date: string; paidBy: string; involvedMembers: string[] }[];
 }
+
+const fetchFlightTime = async (flightNumber: string, date: string, isOutbound: boolean) => {
+  if (!flightNumber || !date) return null;
+  try {
+    const response = await fetch(`https://api.aviationstack.com/v1/flights?access_key=${process.env.NEXT_PUBLIC_AVIATIONSTACK_API_KEY}&flight_iata=${flightNumber}&date=${date}`);
+    const data = await response.json();
+    if (data.data && data.data.length > 0) {
+      const flight = data.data[0];
+      return isOutbound ? flight.departure.scheduled : flight.arrival.scheduled;
+    }
+  } catch (err) {
+    console.error('Failed to fetch flight time:', err);
+  }
+  return null;
+};
 
 export default function TravelApp() {
   const [user, setUser] = useState<User | null>(null);
@@ -40,6 +55,23 @@ export default function TravelApp() {
   const [converterCurrency, setConverterCurrency] = useState<string>('JPY');
   const [editingMemberEmail, setEditingMemberEmail] = useState<string | null>(null);
   const [tempName, setTempName] = useState('');
+
+  // Fetch flight times when flight numbers or dates change
+  useEffect(() => {
+    if (currentTrip?.flight?.out && currentTrip.checkInDate) {
+      fetchFlightTime(currentTrip.flight.out, currentTrip.checkInDate, true).then(time => {
+        if (time) updateField({ flight: { ...currentTrip.flight, outTime: time } });
+      });
+    }
+  }, [currentTrip?.flight?.out, currentTrip?.checkInDate]);
+
+  useEffect(() => {
+    if (currentTrip?.flight?.in && currentTrip.checkOutDate) {
+      fetchFlightTime(currentTrip.flight.in, currentTrip.checkOutDate, false).then(time => {
+        if (time) updateField({ flight: { ...currentTrip.flight, inTime: time } });
+      });
+    }
+  }, [currentTrip?.flight?.in, currentTrip?.checkOutDate]);
 
   // --- Sync & Auth ---
   useEffect(() => {
@@ -203,8 +235,8 @@ export default function TravelApp() {
                       onChange={(e) => updateField({ title: e.target.value })}
                     />
                     <div className="space-y-2 mt-4">
-                      <input placeholder="Check-in Date" className="w-full border rounded p-2" value={currentTrip.checkInDate || ''} onChange={(e) => updateField({ checkInDate: e.target.value })} />
-                      <input placeholder="Check-out Date" className="w-full border rounded p-2" value={currentTrip.checkOutDate || ''} onChange={(e) => updateField({ checkOutDate: e.target.value })} />
+                      <input type="date" className="w-full border rounded p-2" value={currentTrip.checkInDate || ''} onChange={(e) => updateField({ checkInDate: e.target.value })} />
+                      <input type="date" className="w-full border rounded p-2" value={currentTrip.checkOutDate || ''} onChange={(e) => updateField({ checkOutDate: e.target.value })} />
                       <input placeholder="City" className="w-full border rounded p-2" value={currentTrip.city} onChange={(e) => updateField({ city: e.target.value })} />
                     </div>
                   </>
@@ -228,8 +260,8 @@ export default function TravelApp() {
                     </div>
                   ) : (
                     <p className="text-sm">
-                      <span className="font-bold">Outbound: {currentTrip.flight?.out || 'N/A'}</span><br/>
-                      <span className="font-bold">Return: {currentTrip.flight?.in || 'N/A'}</span>
+                      <span className="font-bold">Outbound: {currentTrip.flight?.out || 'N/A'} {currentTrip.flight?.outTime ? `(${currentTrip.flight.outTime})` : ''}</span><br/>
+                      <span className="font-bold">Return: {currentTrip.flight?.in || 'N/A'} {currentTrip.flight?.inTime ? `(${currentTrip.flight.inTime})` : ''}</span>
                     </p>
                   )}
                 </div>
