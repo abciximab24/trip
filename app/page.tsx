@@ -40,7 +40,8 @@ const fetchFlightTime = async (flightNumber: string, date: string, isOutbound: b
     console.log('API response data:', data);
     if (data.data && data.data.length > 0) {
       const flight = data.data[0];
-      const time = isOutbound ? flight.departure.scheduled : flight.arrival.scheduled;
+      const fullTime = isOutbound ? flight.departure.scheduled : flight.arrival.scheduled;
+      const time = fullTime ? fullTime.split('T')[1].split('+')[0].slice(0, 5) : null;
       console.log('Found flight time:', time);
       return time;
     } else {
