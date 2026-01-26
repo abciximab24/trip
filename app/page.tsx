@@ -17,7 +17,7 @@ interface Trip {
   members: Member[];
    memberEmails: string[];
   days: Day[];
-  flight?: { out?: string; in?: string; outTime?: string; inTime?: string; outEstimated?: string; inEstimated?: string };
+  flight?: { out?: string; in?: string; outDeparture?: string; outArrival?: string; inDeparture?: string; inArrival?: string };
   hotel?: { name: string; address: string };
   checkInDate?: string;
   checkOutDate?: string;
@@ -25,9 +25,9 @@ interface Trip {
   bills?: { amount: number; currency: string; description: string; date: string; paidBy: string; involvedMembers: string[] }[];
 }
 
-const fetchFlightTime = async (flightNumber: string, date: string, isOutbound: boolean) => {
+const fetchFlightTime = async (flightNumber: string, date: string) => {
   flightNumber = flightNumber.trim();
-  console.log('Fetching flight time for:', flightNumber, date, isOutbound);
+  console.log('Fetching flight time for:', flightNumber, date);
   if (!flightNumber || !date) {
     console.log('Missing flightNumber or date');
     return null;
@@ -41,12 +41,12 @@ const fetchFlightTime = async (flightNumber: string, date: string, isOutbound: b
     console.log('API response data:', data);
     if (data.data && data.data.length > 0) {
       const flight = data.data[0];
-      const scheduledFull = isOutbound ? flight.departure.scheduled : flight.arrival.scheduled;
-      const estimatedFull = isOutbound ? flight.departure.estimated : flight.arrival.estimated;
-      const scheduled = scheduledFull ? scheduledFull.split('T')[1].split('+')[0].slice(0, 5) : null;
-      const estimated = estimatedFull ? estimatedFull.split('T')[1].split('+')[0].slice(0, 5) : null;
-      console.log('Found scheduled:', scheduled, 'estimated:', estimated);
-      return { scheduled, estimated };
+      const departureFull = flight.departure.scheduled;
+      const arrivalFull = flight.arrival.scheduled;
+      const departure = departureFull ? departureFull.split('T')[1].split('+')[0].slice(0, 5) : null;
+      const arrival = arrivalFull ? arrivalFull.split('T')[1].split('+')[0].slice(0, 5) : null;
+      console.log('Found departure:', departure, 'arrival:', arrival);
+      return { departure, arrival };
     } else {
       console.log('No flight data found');
     }
@@ -76,9 +76,9 @@ export default function TravelApp() {
   useEffect(() => {
     console.log('useEffect for out flight triggered:', currentTrip?.flight?.out, currentTrip?.checkInDate);
     if (currentTrip?.flight?.out && currentTrip.checkInDate) {
-      fetchFlightTime(currentTrip.flight.out, currentTrip.checkInDate, true).then(times => {
+      fetchFlightTime(currentTrip.flight.out, currentTrip.checkInDate).then(times => {
         console.log('Fetched out times:', times);
-        if (times) updateField({ flight: { ...currentTrip.flight, outTime: times.scheduled, outEstimated: times.estimated } });
+        if (times) updateField({ flight: { ...currentTrip.flight, outDeparture: times.departure, outArrival: times.arrival } });
       });
     }
   }, [currentTrip?.flight?.out, currentTrip?.checkInDate]);
@@ -86,23 +86,23 @@ export default function TravelApp() {
   useEffect(() => {
     console.log('useEffect for in flight triggered:', currentTrip?.flight?.in, currentTrip?.checkOutDate);
     if (currentTrip?.flight?.in && currentTrip.checkOutDate) {
-      fetchFlightTime(currentTrip.flight.in, currentTrip.checkOutDate, false).then(times => {
+      fetchFlightTime(currentTrip.flight.in, currentTrip.checkOutDate).then(times => {
         console.log('Fetched in times:', times);
-        if (times) updateField({ flight: { ...currentTrip.flight, inTime: times.scheduled, inEstimated: times.estimated } });
+        if (times) updateField({ flight: { ...currentTrip.flight, inDeparture: times.departure, inArrival: times.arrival } });
       });
     }
   }, [currentTrip?.flight?.in, currentTrip?.checkOutDate]);
 
   // Fetch flight times when trip loads if not already set
   useEffect(() => {
-    if (currentTrip?.flight?.out && currentTrip.checkInDate && !currentTrip.flight.outTime) {
-      fetchFlightTime(currentTrip.flight.out, currentTrip.checkInDate, true).then(times => {
-        if (times) updateField({ flight: { ...currentTrip.flight, outTime: times.scheduled, outEstimated: times.estimated } });
+    if (currentTrip?.flight?.out && currentTrip.checkInDate && !currentTrip.flight.outDeparture) {
+      fetchFlightTime(currentTrip.flight.out, currentTrip.checkInDate).then(times => {
+        if (times) updateField({ flight: { ...currentTrip.flight, outDeparture: times.departure, outArrival: times.arrival } });
       });
     }
-    if (currentTrip?.flight?.in && currentTrip.checkOutDate && !currentTrip.flight.inTime) {
-      fetchFlightTime(currentTrip.flight.in, currentTrip.checkOutDate, false).then(times => {
-        if (times) updateField({ flight: { ...currentTrip.flight, inTime: times.scheduled, inEstimated: times.estimated } });
+    if (currentTrip?.flight?.in && currentTrip.checkOutDate && !currentTrip.flight.inDeparture) {
+      fetchFlightTime(currentTrip.flight.in, currentTrip.checkOutDate).then(times => {
+        if (times) updateField({ flight: { ...currentTrip.flight, inDeparture: times.departure, inArrival: times.arrival } });
       });
     }
   }, [currentTrip?.id]);
