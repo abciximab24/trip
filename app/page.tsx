@@ -293,13 +293,10 @@ export default function TravelApp() {
                       <input placeholder="Return Flight No." className="bg-transparent text-sm w-full" value={currentTrip.flight?.in || ''} onChange={(e) => updateField({ flight: { out: currentTrip.flight?.out || '', in: e.target.value } })} />
                     </div>
                   ) : (
-                    <>
-                      {console.log('Rendering flight info:', currentTrip.flight)}
-                      <p className="text-sm">
-                        <span className="font-bold">Outbound: {currentTrip.flight?.out || 'N/A'}</span><br/>
-                        <span className="font-bold">Return: {currentTrip.flight?.in || 'N/A'}</span>
-                      </p>
-                    </>
+                    <p className="text-sm">
+                      <span className="font-bold">Outbound: {currentTrip.flight?.out || 'N/A'} {currentTrip.flight?.outDeparture ? `(${currentTrip.flight.outDeparture} - ${currentTrip.flight.outArrival})` : ''}</span><br/>
+                      <span className="font-bold">Return: {currentTrip.flight?.in || 'N/A'} {currentTrip.flight?.inDeparture ? `(${currentTrip.flight.inDeparture} - ${currentTrip.flight.inArrival})` : ''}</span>
+                    </p>
                   )}
                 </div>
                 <div className="bg-green-50 p-4 rounded-2xl">
