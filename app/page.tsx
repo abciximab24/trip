@@ -26,13 +26,25 @@ interface Trip {
 }
 
 const fetchFlightTime = async (flightNumber: string, date: string, isOutbound: boolean) => {
-  if (!flightNumber || !date) return null;
+  console.log('Fetching flight time for:', flightNumber, date, isOutbound);
+  if (!flightNumber || !date) {
+    console.log('Missing flightNumber or date');
+    return null;
+  }
   try {
-    const response = await fetch(`https://api.aviationstack.com/v1/flights?access_key=${process.env.NEXT_PUBLIC_AVIATIONSTACK_API_KEY}&flight_iata=${flightNumber}&date=${date}`);
+    const url = `https://api.aviationstack.com/v1/flights?access_key=${process.env.NEXT_PUBLIC_AVIATIONSTACK_API_KEY}&flight_iata=${flightNumber}&date=${date}`;
+    console.log('Fetching URL:', url);
+    const response = await fetch(url);
+    console.log('Response status:', response.status);
     const data = await response.json();
+    console.log('API response data:', data);
     if (data.data && data.data.length > 0) {
       const flight = data.data[0];
-      return isOutbound ? flight.departure.scheduled : flight.arrival.scheduled;
+      const time = isOutbound ? flight.departure.scheduled : flight.arrival.scheduled;
+      console.log('Found flight time:', time);
+      return time;
+    } else {
+      console.log('No flight data found');
     }
   } catch (err) {
     console.error('Failed to fetch flight time:', err);
@@ -58,16 +70,20 @@ export default function TravelApp() {
 
   // Fetch flight times when flight numbers or dates change
   useEffect(() => {
+    console.log('useEffect for out flight triggered:', currentTrip?.flight?.out, currentTrip?.checkInDate);
     if (currentTrip?.flight?.out && currentTrip.checkInDate) {
       fetchFlightTime(currentTrip.flight.out, currentTrip.checkInDate, true).then(time => {
+        console.log('Fetched out time:', time);
         if (time) updateField({ flight: { ...currentTrip.flight, outTime: time } });
       });
     }
   }, [currentTrip?.flight?.out, currentTrip?.checkInDate]);
 
   useEffect(() => {
+    console.log('useEffect for in flight triggered:', currentTrip?.flight?.in, currentTrip?.checkOutDate);
     if (currentTrip?.flight?.in && currentTrip.checkOutDate) {
       fetchFlightTime(currentTrip.flight.in, currentTrip.checkOutDate, false).then(time => {
+        console.log('Fetched in time:', time);
         if (time) updateField({ flight: { ...currentTrip.flight, inTime: time } });
       });
     }
