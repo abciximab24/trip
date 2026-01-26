@@ -56,17 +56,19 @@ export default function TravelApp() {
       console.log('Firestore snapshot received, docs count:', snapshot.docs.length);
       const docs = snapshot.docs.map(d => {
         const data = d.data();
-        let trip = { id: d.id, ...data } as Trip;
+        const baseTrip = { id: d.id, ...data } as Trip;
         // Migration: if members are strings, convert to Member[]
         if (Array.isArray(data.members) && data.members.length > 0 && typeof data.members[0] === 'string') {
+          console.log('Migrating trip:', d.id, 'old members:', data.members);
           const migratedMembers = (data.members as string[]).map(email => ({ email, name: undefined }));
           const migratedMemberEmails = data.members as string[];
-          trip.members = migratedMembers;
-          trip.memberEmails = migratedMemberEmails;
+          const migratedTrip = { ...baseTrip, members: migratedMembers, memberEmails: migratedMemberEmails };
           // Update the document asynchronously
           updateDoc(d.ref, { members: migratedMembers, memberEmails: migratedMemberEmails }).catch(err => console.error('Migration update failed:', err));
+          console.log('Migrated trip:', migratedTrip);
+          return migratedTrip;
         }
-        return trip;
+        return baseTrip;
       });
       setTrips(docs);
       if (currentTrip) {
@@ -99,8 +101,13 @@ export default function TravelApp() {
   };
 
   const updateMemberName = (email: string, name: string) => {
-    if (!currentTrip) return;
+    console.log('updateMemberName called:', email, name);
+    if (!currentTrip) {
+      console.error('No currentTrip');
+      return;
+    }
     const newMembers = currentTrip.members.map(m => m.email === email ? { ...m, name: name.trim() || undefined } : m);
+    console.log('New members:', newMembers);
     updateField({ members: newMembers });
   };
 
@@ -318,14 +325,14 @@ export default function TravelApp() {
                           value={tempName}
                           onChange={(e) => setTempName(e.target.value)}
                         />
-                        <button onClick={() => { updateMemberName(member.email, tempName); setEditingMemberEmail(null); }} className="text-green-500 text-sm">Save</button>
-                        <button onClick={() => setEditingMemberEmail(null)} className="text-gray-500 text-sm">Cancel</button>
+                        <button onClick={() => { console.log('Save clicked for', member.email, 'name:', tempName); updateMemberName(member.email, tempName); setEditingMemberEmail(null); }} className="bg-green-500 text-white px-2 py-1 rounded text-sm">Save</button>
+                        <button onClick={() => setEditingMemberEmail(null)} className="bg-gray-500 text-white px-2 py-1 rounded text-sm">Cancel</button>
                       </div>
                     ) : (
                       <div className="flex items-center gap-2 flex-1">
                         <span className="text-sm">{getDisplayName(member.email)}</span>
                         {member.email === user?.email && (
-                          <button onClick={() => { setEditingMemberEmail(member.email); setTempName(member.name || ''); }} className="text-gray-400 hover:text-jp-accent">
+                          <button onClick={() => { console.log('Edit clicked for', member.email); setEditingMemberEmail(member.email); setTempName(member.name || ''); }} className="text-gray-400 hover:text-jp-accent">
                             <i className="fas fa-edit"></i>
                           </button>
                         )}
@@ -334,17 +341,15 @@ export default function TravelApp() {
                   </div>
                 ))}
               </div>
-              {isEditing && (
-                <div className="mt-4 flex gap-2">
-                  <input
-                    placeholder="New member email"
-                    className="flex-1 border rounded p-2"
-                    value={newMemberEmail}
-                    onChange={(e) => setNewMemberEmail(e.target.value)}
-                  />
-                  <button onClick={() => { addMember(newMemberEmail); setNewMemberEmail(''); }} className="bg-jp-accent text-white px-4 py-2 rounded">Add</button>
-                </div>
-              )}
+              <div className="mt-4 flex gap-2">
+                <input
+                  placeholder="New member email"
+                  className="flex-1 border rounded p-2"
+                  value={newMemberEmail}
+                  onChange={(e) => setNewMemberEmail(e.target.value)}
+                />
+                <button onClick={() => { addMember(newMemberEmail); setNewMemberEmail(''); }} style={{ backgroundColor: 'blue', color: 'white', padding: '8px 16px', borderRadius: '4px', border: '1px solid blue' }}>Add</button>
+              </div>
             </section>
           )}
 

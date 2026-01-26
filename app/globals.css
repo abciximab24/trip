@@ -5,9 +5,11 @@
   --foreground: #171717;
 }
 
-@theme inline {
+@theme {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
+  --color-jp-accent: #3b82f6;
+  --color-jp-text: #1f2937;
   --font-sans: var(--font-geist-sans);
   --font-mono: var(--font-geist-mono);
 }
