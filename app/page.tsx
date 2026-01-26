@@ -7,13 +7,15 @@ import { collection, query, where, onSnapshot, doc, updateDoc, addDoc } from "fi
 // --- Types ---
 interface Event { title: string; time: string; desc: string; type: 'spot' | 'food' | 'transport'; lat?: number; lng?: number; }
 interface Day { day: string; date: string; location: string; events: Event[]; }
+interface Member { email: string; name?: string; }
 interface Trip {
   id?: string;
   title: string;
   dateRange: string;
   city: string;
   coverColor: string;
-  members: string[];
+  members: Member[];
+   memberEmails: string[];
   days: Day[];
   flight?: { out: string; in: string };
   hotel?: { name: string; address: string };
@@ -36,6 +38,8 @@ export default function TravelApp() {
   const [newBill, setNewBill] = useState({ description: '', amount: 0, currency: 'HKD', date: new Date().toISOString().split('T')[0], paidBy: '', involvedMembers: [] as string[] });
   const [converterAmount, setConverterAmount] = useState<string>('0');
   const [converterCurrency, setConverterCurrency] = useState<string>('JPY');
+  const [editingMemberEmail, setEditingMemberEmail] = useState<string | null>(null);
+  const [tempName, setTempName] = useState('');
 
   // --- Sync & Auth ---
   useEffect(() => {
@@ -46,14 +50,31 @@ export default function TravelApp() {
 
   useEffect(() => {
     if (!user) return;
-    const q = query(collection(db, "trips"), where("members", "array-contains", user.email));
+    console.log('Setting up Firestore listener for user:', user.email);
+    const q = query(collection(db, "trips"), where("memberEmails", "array-contains", user.email?.toLowerCase()));
     return onSnapshot(q, (snapshot) => {
-      const docs = snapshot.docs.map(d => ({ id: d.id, ...d.data() } as Trip));
+      console.log('Firestore snapshot received, docs count:', snapshot.docs.length);
+      const docs = snapshot.docs.map(d => {
+        const data = d.data();
+        let trip = { id: d.id, ...data } as Trip;
+        // Migration: if members are strings, convert to Member[]
+        if (Array.isArray(data.members) && data.members.length > 0 && typeof data.members[0] === 'string') {
+          const migratedMembers = (data.members as string[]).map(email => ({ email, name: undefined }));
+          const migratedMemberEmails = data.members as string[];
+          trip.members = migratedMembers;
+          trip.memberEmails = migratedMemberEmails;
+          // Update the document asynchronously
+          updateDoc(d.ref, { members: migratedMembers, memberEmails: migratedMemberEmails }).catch(err => console.error('Migration update failed:', err));
+        }
+        return trip;
+      });
       setTrips(docs);
       if (currentTrip) {
         const updated = docs.find(t => t.id === currentTrip.id);
         if (updated) setCurrentTrip(updated);
       }
+    }, (error) => {
+      console.error('Firestore listener error:', error);
     });
   }, [user, currentTrip?.id]);
 
@@ -70,9 +91,22 @@ export default function TravelApp() {
   };
 
   const addMember = (email: string) => {
-    if (!currentTrip || !email || !email.includes('@') || currentTrip.members.includes(email)) return;
-    const newMembers = [...currentTrip.members, email];
+    if (!currentTrip || !email || !email.includes('@') || currentTrip.memberEmails.includes(email)) return;
+    const newMember: Member = { email };
+    const newMembers = [...currentTrip.members, newMember];
+    const newMemberEmails = [...currentTrip.memberEmails, email];
+    updateField({ members: newMembers, memberEmails: newMemberEmails });
+  };
+
+  const updateMemberName = (email: string, name: string) => {
+    if (!currentTrip) return;
+    const newMembers = currentTrip.members.map(m => m.email === email ? { ...m, name: name.trim() || undefined } : m);
     updateField({ members: newMembers });
+  };
+
+  const getDisplayName = (email: string) => {
+    const member = currentTrip?.members.find(m => m.email === email);
+    return member?.name || email;
   };
 
   const addEvent = (dayIdx: number) => {
@@ -137,7 +171,8 @@ export default function TravelApp() {
             </div>
           ))}
           <button onClick={async () => {
-             const newTrip = { title: "New Journey", dateRange: "TBD", city: "Tokyo", coverColor: "border-jp-accent", members: [user?.email], days: [] };
+             const email = user?.email;
+             const newTrip = { title: "New Journey", dateRange: "TBD", city: "Tokyo", coverColor: "border-jp-accent", members: [{ email }], memberEmails: [email], days: [] };
              const docRef = await addDoc(collection(db, "trips"), newTrip);
              setCurrentTrip({id: docRef.id, ...newTrip} as Trip);
              setView('trip');
@@ -275,7 +310,28 @@ export default function TravelApp() {
               <h3 className="text-xl font-bold mb-4">Members</h3>
               <div className="space-y-2">
                 {currentTrip.members.map((member, idx) => (
-                  <div key={idx} className="text-sm">{member}</div>
+                  <div key={idx} className="flex items-center justify-between">
+                    {editingMemberEmail === member.email ? (
+                      <div className="flex items-center gap-2 flex-1">
+                        <input
+                          className="flex-1 border rounded p-1 text-sm"
+                          value={tempName}
+                          onChange={(e) => setTempName(e.target.value)}
+                        />
+                        <button onClick={() => { updateMemberName(member.email, tempName); setEditingMemberEmail(null); }} className="text-green-500 text-sm">Save</button>
+                        <button onClick={() => setEditingMemberEmail(null)} className="text-gray-500 text-sm">Cancel</button>
+                      </div>
+                    ) : (
+                      <div className="flex items-center gap-2 flex-1">
+                        <span className="text-sm">{getDisplayName(member.email)}</span>
+                        {member.email === user?.email && (
+                          <button onClick={() => { setEditingMemberEmail(member.email); setTempName(member.name || ''); }} className="text-gray-400 hover:text-jp-accent">
+                            <i className="fas fa-edit"></i>
+                          </button>
+                        )}
+                      </div>
+                    )}
+                  </div>
                 ))}
               </div>
               {isEditing && (
@@ -361,10 +417,10 @@ export default function TravelApp() {
                         <h4 className="font-bold">{bill.description}</h4>
                         <span className="text-lg font-bold text-green-600">{bill.amount} {bill.currency}</span>
                       </div>
-                      <p className="text-sm text-gray-600">Paid by: {bill.paidBy || 'N/A'}</p>
+                      <p className="text-sm text-gray-600">Paid by: {getDisplayName(bill.paidBy) || 'N/A'}</p>
                       <p className="text-sm text-gray-600">Date: {bill.date}</p>
-                      <p className="text-sm text-gray-600">Each involved member owes: {splitAmount.toFixed(2)} {bill.currency} to {bill.paidBy || 'N/A'}</p>
-                      <p className="text-sm text-gray-600">Involved: {(bill.involvedMembers || []).join(', ')}</p>
+                      <p className="text-sm text-gray-600">Each involved member owes: {splitAmount.toFixed(2)} {bill.currency} to {getDisplayName(bill.paidBy) || 'N/A'}</p>
+                      <p className="text-sm text-gray-600">Involved: {(bill.involvedMembers || []).map(email => getDisplayName(email)).join(', ')}</p>
                     </div>
                   );
                 }) || <p className="text-gray-500">No bills yet</p>}
@@ -412,27 +468,27 @@ export default function TravelApp() {
                     >
                       <option value="">Select who paid</option>
                       {currentTrip.members.map(member => (
-                        <option key={member} value={member}>{member}</option>
+                        <option key={member.email} value={member.email}>{member.name || member.email}</option>
                       ))}
                     </select>
                     <div>
                       <label className="block text-sm font-medium mb-1">Who is involved?</label>
                       <div className="space-y-1">
                         {currentTrip.members.map(member => (
-                          <label key={member} className="flex items-center">
+                          <label key={member.email} className="flex items-center">
                             <input
                               type="checkbox"
-                              checked={newBill.involvedMembers.includes(member)}
+                              checked={newBill.involvedMembers.includes(member.email)}
                               onChange={(e) => {
                                 if (e.target.checked) {
-                                  setNewBill({ ...newBill, involvedMembers: [...newBill.involvedMembers, member] });
+                                  setNewBill({ ...newBill, involvedMembers: [...newBill.involvedMembers, member.email] });
                                 } else {
-                                  setNewBill({ ...newBill, involvedMembers: newBill.involvedMembers.filter(m => m !== member) });
+                                  setNewBill({ ...newBill, involvedMembers: newBill.involvedMembers.filter(m => m !== member.email) });
                                 }
                               }}
                               className="mr-2"
                             />
-                            {member}
+                            {member.name || member.email}
                           </label>
                         ))}
                       </div>
