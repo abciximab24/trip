@@ -26,6 +26,7 @@ interface Trip {
 }
 
 const fetchFlightTime = async (flightNumber: string, date: string, isOutbound: boolean) => {
+  flightNumber = flightNumber.trim();
   console.log('Fetching flight time for:', flightNumber, date, isOutbound);
   if (!flightNumber || !date) {
     console.log('Missing flightNumber or date');
