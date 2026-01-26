@@ -9,7 +9,7 @@ runConfig:
   # cpu: 1
   # memoryMiB: 512
 
-# Environment variables and secrets.
+  # Environment variables and secrets.
 env:
   # Configure environment variables.
   # See https://firebase.google.com/docs/app-hosting/configure#user-defined-environment
@@ -50,7 +50,8 @@ env:
       - RUNTIME
   - variable: NEXT_PUBLIC_AVIATIONSTACK_API_KEY
     secret: AVIATIONSTACK_API_KEY
-
+  - variable: AVIATIONSTACK_API_KEY
+    secret: AVIATIONSTACK_API_KEY
   # Grant access to secrets in Cloud Secret Manager.
   # See https://firebase.google.com/docs/app-hosting/configure#secret-parameters
   # - variable: MY_SECRET
