@@ -17,7 +17,7 @@ interface Trip {
   members: Member[];
    memberEmails: string[];
   days: Day[];
-  flight?: { out?: string; in?: string; outTime?: string; inTime?: string };
+  flight?: { out?: string; in?: string; outTime?: string; inTime?: string; outEstimated?: string; inEstimated?: string };
   hotel?: { name: string; address: string };
   checkInDate?: string;
   checkOutDate?: string;
@@ -41,10 +41,12 @@ const fetchFlightTime = async (flightNumber: string, date: string, isOutbound: b
     console.log('API response data:', data);
     if (data.data && data.data.length > 0) {
       const flight = data.data[0];
-      const fullTime = isOutbound ? flight.departure.scheduled : flight.arrival.scheduled;
-      const time = fullTime ? fullTime.split('T')[1].split('+')[0].slice(0, 5) : null;
-      console.log('Found flight time:', time);
-      return time;
+      const scheduledFull = isOutbound ? flight.departure.scheduled : flight.arrival.scheduled;
+      const estimatedFull = isOutbound ? flight.departure.estimated : flight.arrival.estimated;
+      const scheduled = scheduledFull ? scheduledFull.split('T')[1].split('+')[0].slice(0, 5) : null;
+      const estimated = estimatedFull ? estimatedFull.split('T')[1].split('+')[0].slice(0, 5) : null;
+      console.log('Found scheduled:', scheduled, 'estimated:', estimated);
+      return { scheduled, estimated };
     } else {
       console.log('No flight data found');
     }
@@ -74,9 +76,9 @@ export default function TravelApp() {
   useEffect(() => {
     console.log('useEffect for out flight triggered:', currentTrip?.flight?.out, currentTrip?.checkInDate);
     if (currentTrip?.flight?.out && currentTrip.checkInDate) {
-      fetchFlightTime(currentTrip.flight.out, currentTrip.checkInDate, true).then(time => {
-        console.log('Fetched out time:', time);
-        if (time) updateField({ flight: { ...currentTrip.flight, outTime: time } });
+      fetchFlightTime(currentTrip.flight.out, currentTrip.checkInDate, true).then(times => {
+        console.log('Fetched out times:', times);
+        if (times) updateField({ flight: { ...currentTrip.flight, outTime: times.scheduled, outEstimated: times.estimated } });
       });
     }
   }, [currentTrip?.flight?.out, currentTrip?.checkInDate]);
@@ -84,9 +86,9 @@ export default function TravelApp() {
   useEffect(() => {
     console.log('useEffect for in flight triggered:', currentTrip?.flight?.in, currentTrip?.checkOutDate);
     if (currentTrip?.flight?.in && currentTrip.checkOutDate) {
-      fetchFlightTime(currentTrip.flight.in, currentTrip.checkOutDate, false).then(time => {
-        console.log('Fetched in time:', time);
-        if (time) updateField({ flight: { ...currentTrip.flight, inTime: time } });
+      fetchFlightTime(currentTrip.flight.in, currentTrip.checkOutDate, false).then(times => {
+        console.log('Fetched in times:', times);
+        if (times) updateField({ flight: { ...currentTrip.flight, inTime: times.scheduled, inEstimated: times.estimated } });
       });
     }
   }, [currentTrip?.flight?.in, currentTrip?.checkOutDate]);
@@ -94,13 +96,13 @@ export default function TravelApp() {
   // Fetch flight times when trip loads if not already set
   useEffect(() => {
     if (currentTrip?.flight?.out && currentTrip.checkInDate && !currentTrip.flight.outTime) {
-      fetchFlightTime(currentTrip.flight.out, currentTrip.checkInDate, true).then(time => {
-        if (time) updateField({ flight: { ...currentTrip.flight, outTime: time } });
+      fetchFlightTime(currentTrip.flight.out, currentTrip.checkInDate, true).then(times => {
+        if (times) updateField({ flight: { ...currentTrip.flight, outTime: times.scheduled, outEstimated: times.estimated } });
       });
     }
     if (currentTrip?.flight?.in && currentTrip.checkOutDate && !currentTrip.flight.inTime) {
-      fetchFlightTime(currentTrip.flight.in, currentTrip.checkOutDate, false).then(time => {
-        if (time) updateField({ flight: { ...currentTrip.flight, inTime: time } });
+      fetchFlightTime(currentTrip.flight.in, currentTrip.checkOutDate, false).then(times => {
+        if (times) updateField({ flight: { ...currentTrip.flight, inTime: times.scheduled, inEstimated: times.estimated } });
       });
     }
   }, [currentTrip?.id]);
