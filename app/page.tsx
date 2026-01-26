@@ -294,8 +294,8 @@ export default function TravelApp() {
                     </div>
                   ) : (
                     <p className="text-sm">
-                      <span className="font-bold">Outbound: {currentTrip.flight?.out || 'N/A'} {currentTrip.flight?.outTime ? `(${currentTrip.flight.outTime})` : ''}</span><br/>
-                      <span className="font-bold">Return: {currentTrip.flight?.in || 'N/A'} {currentTrip.flight?.inTime ? `(${currentTrip.flight.inTime})` : ''}</span>
+                      <span className="font-bold">Outbound: {currentTrip.flight?.out || 'N/A'}</span><br/>
+                      <span className="font-bold">Return: {currentTrip.flight?.in || 'N/A'}</span>
                     </p>
                   )}
                 </div>
