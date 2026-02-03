@@ -4,6 +4,7 @@ import { auth, provider, db } from '../firebase';
 import { signInWithPopup, signOut, onAuthStateChanged, User } from "firebase/auth";
 import { collection, query, where, onSnapshot, doc, updateDoc, addDoc } from "firebase/firestore";
 import TravelRouteMap from './components/TravelRouteMap';
+import { geocodeAddress } from './utils/googleMaps';
 
 // --- Types ---
 interface Event { title: string; time: string; desc: string; type: 'spot' | 'food' | 'transport'; lat?: number; lng?: number; }
@@ -18,7 +19,7 @@ interface Trip {
   members: Member[];
    memberEmails: string[];
   days: Day[];
-  flight?: { out?: string; in?: string; outDeparture?: string; outArrival?: string; inDeparture?: string; inArrival?: string; outArrivalAirport?: { iata: string; name: string; lat: number; lng: number }; inArrivalAirport?: { iata: string; name: string; lat: number; lng: number } };
+  flight?: { out?: string; in?: string; outDeparture?: string; outArrival?: string; inDeparture?: string; inArrival?: string; outArrivalAirport?: { iata: string; name: string; lat: number; lng: number }; inArrivalAirport?: { iata: string; name: string; lat: number; lng: number }; arrivalAirport?: string };
   hotel?: { name: string; address: string };
   checkInDate?: string;
   checkOutDate?: string;
@@ -33,6 +34,9 @@ const fetchFlightTime = async (flightNumber: string, date: string) => {
     console.log('Missing flightNumber or date');
     return null;
   }
+
+
+
   try {
     const url = `https://api.aviationstack.com/v1/flights?access_key=${process.env.NEXT_PUBLIC_AVIATIONSTACK_API_KEY}&flight_iata=${flightNumber}&date=${date}`;
     console.log('Fetching URL:', url);
@@ -48,13 +52,24 @@ const fetchFlightTime = async (flightNumber: string, date: string) => {
       const arrival = arrivalFull ? arrivalFull.split('T')[1].split('+')[0].slice(0, 5) : null;
       const arrivalAirport = flight.arrival?.airport;
       let arrivalAirportData = null;
-      if (arrivalAirport && arrivalAirport.iata_code && arrivalAirport.name && arrivalAirport.latitude && arrivalAirport.longitude) {
-        arrivalAirportData = {
-          iata: arrivalAirport.iata_code,
-          name: arrivalAirport.name,
-          lat: parseFloat(arrivalAirport.latitude),
-          lng: parseFloat(arrivalAirport.longitude)
-        };
+      if (arrivalAirport && arrivalAirport.iata_code && arrivalAirport.name) {
+        let lat = arrivalAirport.latitude ? parseFloat(arrivalAirport.latitude) : null;
+        let lng = arrivalAirport.longitude ? parseFloat(arrivalAirport.longitude) : null;
+        if (lat === null || lng === null) {
+          const geocoded = await geocodeAddress(arrivalAirport.name);
+          if (geocoded) {
+            lat = geocoded.lat;
+            lng = geocoded.lng;
+          }
+        }
+        if (lat !== null && lng !== null) {
+          arrivalAirportData = {
+            iata: arrivalAirport.iata_code,
+            name: arrivalAirport.name,
+            lat,
+            lng
+          };
+        }
       }
       console.log('Found departure:', departure, 'arrival:', arrival, 'arrivalAirport:', arrivalAirportData);
       return { departure, arrival, arrivalAirport: arrivalAirportData };
@@ -64,6 +79,46 @@ const fetchFlightTime = async (flightNumber: string, date: string) => {
   } catch (err) {
     console.error('Failed to fetch flight time:', err);
   }
+
+  // Fallback: Use routes API to get arrival airport
+  try {
+    const routesUrl = `https://api.aviationstack.com/v1/routes?access_key=${process.env.NEXT_PUBLIC_AVIATIONSTACK_API_KEY}&flight_iata=${flightNumber}`;
+    console.log('Fetching routes URL:', routesUrl);
+    const routesResponse = await fetch(routesUrl);
+    const routesData = await routesResponse.json();
+    console.log('Routes API response:', routesData);
+    if (routesData.data && routesData.data.length > 0) {
+      const route = routesData.data[0];
+      const arrivalAirport = route.arrival;
+      if (arrivalAirport && arrivalAirport.iata_code && arrivalAirport.name) {
+        let lat = arrivalAirport.latitude ? parseFloat(arrivalAirport.latitude) : null;
+        let lng = arrivalAirport.longitude ? parseFloat(arrivalAirport.longitude) : null;
+        if (lat === null || lng === null) {
+          const geocoded = await geocodeAddress(arrivalAirport.name);
+          if (geocoded) {
+            lat = geocoded.lat;
+            lng = geocoded.lng;
+          }
+        }
+        if (lat !== null && lng !== null) {
+          console.log('Using routes API for flight:', flightNumber);
+          return {
+            departure: null,
+            arrival: null,
+            arrivalAirport: {
+              iata: arrivalAirport.iata_code,
+              name: arrivalAirport.name,
+              lat,
+              lng
+            }
+          };
+        }
+      }
+    }
+  } catch (routesErr) {
+    console.error('Failed to fetch routes:', routesErr);
+  }
+
   return null;
 };
 
@@ -74,7 +129,7 @@ export default function TravelApp() {
   const [currentTrip, setCurrentTrip] = useState<Trip | null>(null);
   const [isEditing, setIsEditing] = useState(false);
   const [newMemberEmail, setNewMemberEmail] = useState('');
-  const [activeTab, setActiveTab] = useState<'members' | 'trip-info' | 'itinerary' | 'currency' | 'bills' | 'transport'>('trip-info');
+  const [activeTab, setActiveTab] = useState<'members' | 'trip-info' | 'itinerary' | 'currency' | 'bills'>('trip-info');
   const [exchangeRates, setExchangeRates] = useState<{ [key: string]: number } | null>(null);
   const [isAddingBill, setIsAddingBill] = useState(false);
   const [newBill, setNewBill] = useState({ description: '', amount: 0, currency: 'HKD', date: new Date().toISOString().split('T')[0], paidBy: '', involvedMembers: [] as string[] });
@@ -82,6 +137,7 @@ export default function TravelApp() {
   const [converterCurrency, setConverterCurrency] = useState<string>('JPY');
   const [editingMemberEmail, setEditingMemberEmail] = useState<string | null>(null);
   const [tempName, setTempName] = useState('');
+  const [isReverseRoute, setIsReverseRoute] = useState(false);
 
   // Fetch flight times when flight numbers or dates change
   useEffect(() => {
@@ -234,6 +290,15 @@ export default function TravelApp() {
     return ['USD', 'EUR', 'JPY', 'KRW', 'THB', 'SGD'];
   };
 
+  const getAirportsForCity = (city: string) => {
+    if (city.toLowerCase().includes('tokyo')) return ['Haneda Airport', 'Narita Airport'];
+    if (city.toLowerCase().includes('seoul')) return ['Incheon Airport', 'Gimpo Airport'];
+    if (city.toLowerCase().includes('bangkok')) return ['Suvarnabhumi Airport', 'Don Mueang Airport'];
+    if (city.toLowerCase().includes('singapore')) return ['Changi Airport'];
+    // default
+    return [];
+  };
+
   if (view === 'login') return (
     <div className="flex flex-col items-center justify-center min-h-screen bg-[#f9f7f2]">
       <h1 className="text-4xl font-bold mb-8 tracking-widest text-jp-text">RYOKOU</h1>
@@ -316,8 +381,14 @@ export default function TravelApp() {
                   <h4 className="text-xs font-bold text-blue-400 uppercase tracking-widest mb-1">Flight</h4>
                   {isEditing ? (
                     <div className="space-y-1">
-                      <input placeholder="Outbound Flight No." className="bg-transparent text-sm w-full" value={currentTrip.flight?.out || ''} onChange={(e) => updateField({ flight: { out: e.target.value, in: currentTrip.flight?.in || '' } })} />
-                      <input placeholder="Return Flight No." className="bg-transparent text-sm w-full" value={currentTrip.flight?.in || ''} onChange={(e) => updateField({ flight: { out: currentTrip.flight?.out || '', in: e.target.value } })} />
+                      <input placeholder="Outbound Flight No." className="bg-transparent text-sm w-full" value={currentTrip.flight?.out || ''} onChange={(e) => updateField({ flight: { ...currentTrip.flight, out: e.target.value } })} />
+                      <input placeholder="Return Flight No." className="bg-transparent text-sm w-full" value={currentTrip.flight?.in || ''} onChange={(e) => updateField({ flight: { ...currentTrip.flight, in: e.target.value } })} />
+                      <select className="bg-transparent text-sm w-full" value={currentTrip.flight?.arrivalAirport || ''} onChange={(e) => updateField({ flight: { ...currentTrip.flight, arrivalAirport: e.target.value } })}>
+                        <option value="">Select Arrival Airport</option>
+                        {getAirportsForCity(currentTrip.city).map(airport => (
+                          <option key={airport} value={airport}>{airport}</option>
+                        ))}
+                      </select>
                     </div>
                   ) : (
                     <p className="text-sm">
@@ -341,6 +412,23 @@ export default function TravelApp() {
                   )}
                 </div>
               </div>
+
+              {/* Transport Section */}
+              <section className="bg-white p-6 rounded-3xl shadow-sm border border-gray-100">
+                <div className="flex justify-between items-center mb-4">
+                  <h3 className="text-xl font-bold">Transport</h3>
+                  <button
+                    onClick={() => setIsReverseRoute(!isReverseRoute)}
+                    className="bg-jp-accent text-white px-4 py-2 rounded-full text-sm font-bold"
+                  >
+                    {isReverseRoute ? 'To Hotel' : 'To Airport'}
+                  </button>
+                </div>
+                <TravelRouteMap
+                  origin={isReverseRoute ? currentTrip.hotel?.address : (currentTrip.flight?.arrivalAirport || currentTrip.flight?.inArrivalAirport)}
+                  destination={isReverseRoute ? (currentTrip.flight?.arrivalAirport || currentTrip.flight?.inArrivalAirport) : currentTrip.hotel?.address}
+                />
+              </section>
             </>
           )}
 
@@ -618,15 +706,7 @@ export default function TravelApp() {
             </section>
           )}
 
-          {activeTab === 'transport' && (
-            <section className="bg-white p-6 rounded-3xl shadow-sm border border-gray-100">
-              <h3 className="text-xl font-bold mb-4">Transport</h3>
-              <TravelRouteMap
-                origin={currentTrip.flight?.outArrivalAirport}
-                destination={currentTrip.hotel?.address}
-              />
-            </section>
-          )}
+
         </div>
       )}
 
@@ -653,10 +733,6 @@ export default function TravelApp() {
             <button onClick={() => setActiveTab('bills')} className={`flex flex-col items-center py-2 px-3 ${activeTab === 'bills' ? 'text-jp-accent' : 'text-gray-400'}`}>
               <i className="fas fa-receipt text-lg mb-1"></i>
               <span className="text-xs">Bills</span>
-            </button>
-            <button onClick={() => setActiveTab('transport')} className={`flex flex-col items-center py-2 px-3 ${activeTab === 'transport' ? 'text-jp-accent' : 'text-gray-400'}`}>
-              <i className="fas fa-route text-lg mb-1"></i>
-              <span className="text-xs">Transport</span>
             </button>
           </div>
         </div>

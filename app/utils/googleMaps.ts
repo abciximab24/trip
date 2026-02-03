@@ -70,6 +70,84 @@ export const getDirections = async (
     const { DirectionsService } = await google.maps.importLibrary("routes") as google.maps.RoutesLibrary;
     const directionsService = new DirectionsService();
 
+    // Try multiple approaches for transit
+    if (travelMode === google.maps.TravelMode.TRANSIT) {
+      // Try with current time first
+      const currentTimeRequest: google.maps.DirectionsRequest = {
+        origin: new google.maps.LatLng(origin.lat, origin.lng),
+        destination: new google.maps.LatLng(destination.lat, destination.lng),
+        travelMode,
+        transitOptions: {
+          departureTime: new Date(),
+          modes: [google.maps.TransitMode.TRAIN, google.maps.TransitMode.BUS, google.maps.TransitMode.SUBWAY],
+          routingPreference: google.maps.TransitRoutePreference.FEWER_TRANSFERS,
+        },
+      };
+
+      const currentTimeResult = await new Promise<google.maps.DirectionsResult | null>((resolve) => {
+        directionsService.route(currentTimeRequest, (result, status) => {
+          if (status === google.maps.DirectionsStatus.OK && result && result.routes[0]) {
+            resolve(result);
+          } else {
+            resolve(null);
+          }
+        });
+      });
+
+      if (currentTimeResult) {
+        const route = currentTimeResult.routes[0];
+        const leg = route.legs[0];
+        return {
+          distance: leg.distance?.text || '',
+          duration: leg.duration?.text || '',
+          steps: leg.steps?.map((step) => ({
+            instructions: step.instructions || '',
+            distance: step.distance?.text || '',
+            duration: step.duration?.text || '',
+          })) || [],
+          polyline: route.overview_polyline || '',
+        };
+      }
+
+      // Try with future time
+      const futureTimeRequest: google.maps.DirectionsRequest = {
+        origin: new google.maps.LatLng(origin.lat, origin.lng),
+        destination: new google.maps.LatLng(destination.lat, destination.lng),
+        travelMode,
+        transitOptions: {
+          departureTime: new Date(Date.now() + 3600000), // 1 hour from now
+          modes: [google.maps.TransitMode.TRAIN, google.maps.TransitMode.BUS, google.maps.TransitMode.SUBWAY],
+          routingPreference: google.maps.TransitRoutePreference.FEWER_TRANSFERS,
+        },
+      };
+
+      const futureTimeResult = await new Promise<google.maps.DirectionsResult | null>((resolve) => {
+        directionsService.route(futureTimeRequest, (result, status) => {
+          if (status === google.maps.DirectionsStatus.OK && result && result.routes[0]) {
+            resolve(result);
+          } else {
+            resolve(null);
+          }
+        });
+      });
+
+      if (futureTimeResult) {
+        const route = futureTimeResult.routes[0];
+        const leg = route.legs[0];
+        return {
+          distance: leg.distance?.text || '',
+          duration: leg.duration?.text || '',
+          steps: leg.steps?.map((step) => ({
+            instructions: step.instructions || '',
+            distance: step.distance?.text || '',
+            duration: step.duration?.text || '',
+          })) || [],
+          polyline: route.overview_polyline || '',
+        };
+      }
+    }
+
+    // For non-transit modes or if transit failed
     const request: google.maps.DirectionsRequest = {
       origin: new google.maps.LatLng(origin.lat, origin.lng),
       destination: new google.maps.LatLng(destination.lat, destination.lng),
@@ -93,7 +171,7 @@ export const getDirections = async (
             polyline: route.overview_polyline || '',
           });
         } else {
-          console.error('Directions request failed:', status);
+          console.error('Directions request failed:', status, 'for mode:', travelMode);
           resolve(null);
         }
       });
