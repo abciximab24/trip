@@ -3,6 +3,7 @@ import { useState, useEffect } from 'react';
 import { auth, provider, db } from '../firebase';
 import { signInWithPopup, signOut, onAuthStateChanged, User } from "firebase/auth";
 import { collection, query, where, onSnapshot, doc, updateDoc, addDoc } from "firebase/firestore";
+import TravelRouteMap from './components/TravelRouteMap';
 
 // --- Types ---
 interface Event { title: string; time: string; desc: string; type: 'spot' | 'food' | 'transport'; lat?: number; lng?: number; }
@@ -17,7 +18,7 @@ interface Trip {
   members: Member[];
    memberEmails: string[];
   days: Day[];
-  flight?: { out?: string; in?: string; outDeparture?: string; outArrival?: string; inDeparture?: string; inArrival?: string };
+  flight?: { out?: string; in?: string; outDeparture?: string; outArrival?: string; inDeparture?: string; inArrival?: string; outArrivalAirport?: { iata: string; name: string; lat: number; lng: number }; inArrivalAirport?: { iata: string; name: string; lat: number; lng: number } };
   hotel?: { name: string; address: string };
   checkInDate?: string;
   checkOutDate?: string;
@@ -45,8 +46,18 @@ const fetchFlightTime = async (flightNumber: string, date: string) => {
       const arrivalFull = flight.arrival.scheduled;
       const departure = departureFull ? departureFull.split('T')[1].split('+')[0].slice(0, 5) : null;
       const arrival = arrivalFull ? arrivalFull.split('T')[1].split('+')[0].slice(0, 5) : null;
-      console.log('Found departure:', departure, 'arrival:', arrival);
-      return { departure, arrival };
+      const arrivalAirport = flight.arrival?.airport;
+      let arrivalAirportData = null;
+      if (arrivalAirport && arrivalAirport.iata_code && arrivalAirport.name && arrivalAirport.latitude && arrivalAirport.longitude) {
+        arrivalAirportData = {
+          iata: arrivalAirport.iata_code,
+          name: arrivalAirport.name,
+          lat: parseFloat(arrivalAirport.latitude),
+          lng: parseFloat(arrivalAirport.longitude)
+        };
+      }
+      console.log('Found departure:', departure, 'arrival:', arrival, 'arrivalAirport:', arrivalAirportData);
+      return { departure, arrival, arrivalAirport: arrivalAirportData };
     } else {
       console.log('No flight data found');
     }
@@ -63,7 +74,7 @@ export default function TravelApp() {
   const [currentTrip, setCurrentTrip] = useState<Trip | null>(null);
   const [isEditing, setIsEditing] = useState(false);
   const [newMemberEmail, setNewMemberEmail] = useState('');
-  const [activeTab, setActiveTab] = useState<'members' | 'trip-info' | 'itinerary' | 'currency' | 'bills'>('trip-info');
+  const [activeTab, setActiveTab] = useState<'members' | 'trip-info' | 'itinerary' | 'currency' | 'bills' | 'transport'>('trip-info');
   const [exchangeRates, setExchangeRates] = useState<{ [key: string]: number } | null>(null);
   const [isAddingBill, setIsAddingBill] = useState(false);
   const [newBill, setNewBill] = useState({ description: '', amount: 0, currency: 'HKD', date: new Date().toISOString().split('T')[0], paidBy: '', involvedMembers: [] as string[] });
@@ -78,7 +89,11 @@ export default function TravelApp() {
     if (currentTrip?.flight?.out && currentTrip.checkInDate) {
       fetchFlightTime(currentTrip.flight.out, currentTrip.checkInDate).then(times => {
         console.log('Fetched out times:', times);
-        if (times) updateField({ flight: { ...currentTrip.flight, outDeparture: times.departure, outArrival: times.arrival } });
+        if (times) {
+          const update = { ...currentTrip.flight, outDeparture: times.departure, outArrival: times.arrival };
+          if (times.arrivalAirport) update.outArrivalAirport = times.arrivalAirport;
+          updateField({ flight: update });
+        }
       });
     }
   }, [currentTrip?.flight?.out, currentTrip?.checkInDate]);
@@ -88,7 +103,11 @@ export default function TravelApp() {
     if (currentTrip?.flight?.in && currentTrip.checkOutDate) {
       fetchFlightTime(currentTrip.flight.in, currentTrip.checkOutDate).then(times => {
         console.log('Fetched in times:', times);
-        if (times) updateField({ flight: { ...currentTrip.flight, inDeparture: times.departure, inArrival: times.arrival } });
+        if (times) {
+          const update = { ...currentTrip.flight, inDeparture: times.departure, inArrival: times.arrival };
+          if (times.arrivalAirport) update.inArrivalAirport = times.arrivalAirport;
+          updateField({ flight: update });
+        }
       });
     }
   }, [currentTrip?.flight?.in, currentTrip?.checkOutDate]);
@@ -97,12 +116,20 @@ export default function TravelApp() {
   useEffect(() => {
     if (currentTrip?.flight?.out && currentTrip.checkInDate && !currentTrip.flight.outDeparture) {
       fetchFlightTime(currentTrip.flight.out, currentTrip.checkInDate).then(times => {
-        if (times) updateField({ flight: { ...currentTrip.flight, outDeparture: times.departure, outArrival: times.arrival } });
+        if (times) {
+          const update = { ...currentTrip.flight, outDeparture: times.departure, outArrival: times.arrival };
+          if (times.arrivalAirport) update.outArrivalAirport = times.arrivalAirport;
+          updateField({ flight: update });
+        }
       });
     }
     if (currentTrip?.flight?.in && currentTrip.checkOutDate && !currentTrip.flight.inDeparture) {
       fetchFlightTime(currentTrip.flight.in, currentTrip.checkOutDate).then(times => {
-        if (times) updateField({ flight: { ...currentTrip.flight, inDeparture: times.departure, inArrival: times.arrival } });
+        if (times) {
+          const update = { ...currentTrip.flight, inDeparture: times.departure, inArrival: times.arrival };
+          if (times.arrivalAirport) update.inArrivalAirport = times.arrivalAirport;
+          updateField({ flight: update });
+        }
       });
     }
   }, [currentTrip?.id]);
@@ -590,6 +617,16 @@ export default function TravelApp() {
               )}
             </section>
           )}
+
+          {activeTab === 'transport' && (
+            <section className="bg-white p-6 rounded-3xl shadow-sm border border-gray-100">
+              <h3 className="text-xl font-bold mb-4">Transport</h3>
+              <TravelRouteMap
+                origin={currentTrip.flight?.outArrivalAirport}
+                destination={currentTrip.hotel?.address}
+              />
+            </section>
+          )}
         </div>
       )}
 
@@ -616,6 +653,10 @@ export default function TravelApp() {
             <button onClick={() => setActiveTab('bills')} className={`flex flex-col items-center py-2 px-3 ${activeTab === 'bills' ? 'text-jp-accent' : 'text-gray-400'}`}>
               <i className="fas fa-receipt text-lg mb-1"></i>
               <span className="text-xs">Bills</span>
+            </button>
+            <button onClick={() => setActiveTab('transport')} className={`flex flex-col items-center py-2 px-3 ${activeTab === 'transport' ? 'text-jp-accent' : 'text-gray-400'}`}>
+              <i className="fas fa-route text-lg mb-1"></i>
+              <span className="text-xs">Transport</span>
             </button>
           </div>
         </div>
