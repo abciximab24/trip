@@ -168,27 +168,7 @@ export default function TravelApp() {
     }
   }, [currentTrip?.flight?.in, currentTrip?.checkOutDate]);
 
-  // Fetch flight times when trip loads if not already set
-  useEffect(() => {
-    if (currentTrip?.flight?.out && currentTrip.checkInDate && !currentTrip.flight.outDeparture) {
-      fetchFlightTime(currentTrip.flight.out, currentTrip.checkInDate).then(times => {
-        if (times) {
-          const update = { ...currentTrip.flight, outDeparture: times.departure, outArrival: times.arrival };
-          if (times.arrivalAirport) update.outArrivalAirport = times.arrivalAirport;
-          updateField({ flight: update });
-        }
-      });
-    }
-    if (currentTrip?.flight?.in && currentTrip.checkOutDate && !currentTrip.flight.inDeparture) {
-      fetchFlightTime(currentTrip.flight.in, currentTrip.checkOutDate).then(times => {
-        if (times) {
-          const update = { ...currentTrip.flight, inDeparture: times.departure, inArrival: times.arrival };
-          if (times.arrivalAirport) update.inArrivalAirport = times.arrivalAirport;
-          updateField({ flight: update });
-        }
-      });
-    }
-  }, [currentTrip?.id]);
+
 
   // --- Sync & Auth ---
   useEffect(() => {
