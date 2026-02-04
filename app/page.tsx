@@ -142,7 +142,7 @@ export default function TravelApp() {
   // Fetch flight times when flight numbers or dates change
   useEffect(() => {
     console.log('useEffect for out flight triggered:', currentTrip?.flight?.out, currentTrip?.checkInDate);
-    if (currentTrip?.flight?.out && currentTrip.checkInDate) {
+    if (currentTrip?.flight?.out && currentTrip.checkInDate && !currentTrip.flight.outDeparture) {
       fetchFlightTime(currentTrip.flight.out, currentTrip.checkInDate).then(times => {
         console.log('Fetched out times:', times);
         if (times) {
@@ -156,7 +156,7 @@ export default function TravelApp() {
 
   useEffect(() => {
     console.log('useEffect for in flight triggered:', currentTrip?.flight?.in, currentTrip?.checkOutDate);
-    if (currentTrip?.flight?.in && currentTrip.checkOutDate) {
+    if (currentTrip?.flight?.in && currentTrip.checkOutDate && !currentTrip.flight.inDeparture) {
       fetchFlightTime(currentTrip.flight.in, currentTrip.checkOutDate).then(times => {
         console.log('Fetched in times:', times);
         if (times) {
