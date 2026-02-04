@@ -86,6 +86,7 @@ export const getDirections = async (
 
       const currentTimeResult = await new Promise<google.maps.DirectionsResult | null>((resolve) => {
         directionsService.route(currentTimeRequest, (result, status) => {
+          console.log('Transit directions status (current time):', status);
           if (status === google.maps.DirectionsStatus.OK && result && result.routes[0]) {
             resolve(result);
           } else {
@@ -123,6 +124,7 @@ export const getDirections = async (
 
       const futureTimeResult = await new Promise<google.maps.DirectionsResult | null>((resolve) => {
         directionsService.route(futureTimeRequest, (result, status) => {
+          console.log('Transit directions status (future time):', status);
           if (status === google.maps.DirectionsStatus.OK && result && result.routes[0]) {
             resolve(result);
           } else {
@@ -156,6 +158,7 @@ export const getDirections = async (
 
     return new Promise((resolve) => {
       directionsService.route(request, (result, status) => {
+        console.log('Directions request status:', status, 'for mode:', travelMode);
         if (status === google.maps.DirectionsStatus.OK && result && result.routes[0]) {
           const route = result.routes[0];
           const leg = route.legs[0];
