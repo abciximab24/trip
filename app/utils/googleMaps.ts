@@ -60,23 +60,35 @@ export interface DirectionsResult {
   polyline: string;
 }
 
+const stringToTravelMode = (mode: string): google.maps.TravelMode => {
+  switch (mode) {
+    case 'DRIVING': return google.maps.TravelMode.DRIVING;
+    case 'WALKING': return google.maps.TravelMode.WALKING;
+    case 'BICYCLING': return google.maps.TravelMode.BICYCLING;
+    case 'TRANSIT': return google.maps.TravelMode.TRANSIT;
+    default: return google.maps.TravelMode.DRIVING;
+  }
+};
+
 export const getDirections = async (
   origin: { lat: number; lng: number },
   destination: { lat: number; lng: number },
-  travelMode: google.maps.TravelMode = google.maps.TravelMode.DRIVING
+  travelMode: google.maps.TravelMode | string = google.maps.TravelMode.DRIVING
 ): Promise<DirectionsResult | null> => {
   try {
     initializeGoogleMaps();
     const { DirectionsService } = await google.maps.importLibrary("routes") as google.maps.RoutesLibrary;
     const directionsService = new DirectionsService();
 
+    const actualTravelMode = typeof travelMode === 'string' ? stringToTravelMode(travelMode) : travelMode;
+
     // Try multiple approaches for transit
-    if (travelMode === google.maps.TravelMode.TRANSIT) {
+    if (actualTravelMode === google.maps.TravelMode.TRANSIT) {
       // Try with current time first
       const currentTimeRequest: google.maps.DirectionsRequest = {
         origin: new google.maps.LatLng(origin.lat, origin.lng),
         destination: new google.maps.LatLng(destination.lat, destination.lng),
-        travelMode,
+        travelMode: actualTravelMode,
         transitOptions: {
           departureTime: new Date(),
           modes: [google.maps.TransitMode.TRAIN, google.maps.TransitMode.BUS, google.maps.TransitMode.SUBWAY],
@@ -114,7 +126,7 @@ export const getDirections = async (
       const futureTimeRequest: google.maps.DirectionsRequest = {
         origin: new google.maps.LatLng(origin.lat, origin.lng),
         destination: new google.maps.LatLng(destination.lat, destination.lng),
-        travelMode,
+        travelMode: actualTravelMode,
         transitOptions: {
           departureTime: new Date(Date.now() + 3600000), // 1 hour from now
           modes: [google.maps.TransitMode.TRAIN, google.maps.TransitMode.BUS, google.maps.TransitMode.SUBWAY],
@@ -153,7 +165,7 @@ export const getDirections = async (
     const request: google.maps.DirectionsRequest = {
       origin: new google.maps.LatLng(origin.lat, origin.lng),
       destination: new google.maps.LatLng(destination.lat, destination.lng),
-      travelMode,
+      travelMode: actualTravelMode,
     };
 
     return new Promise((resolve) => {

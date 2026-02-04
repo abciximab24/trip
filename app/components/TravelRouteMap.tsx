@@ -5,7 +5,7 @@ import { geocodeAddress, getDirections, DirectionsResult, initializeGoogleMaps }
 interface TravelRouteMapProps {
   origin?: string | { lat: number; lng: number; name?: string };
   destination?: string | { lat: number; lng: number; name?: string };
-  travelMode?: google.maps.TravelMode;
+  travelMode?: google.maps.TravelMode | string;
 }
 
 // Function to get accurate transit information for major airport routes
@@ -60,7 +60,7 @@ const getTransitInfo = async (origin: { lat: number; lng: number }, dest: { lat:
   return null;
 };
 
-const TravelRouteMap: React.FC<TravelRouteMapProps> = ({ origin, destination, travelMode = google.maps.TravelMode.DRIVING }) => {
+const TravelRouteMap: React.FC<TravelRouteMapProps> = ({ origin, destination, travelMode = 'DRIVING' }) => {
   const mapRef = useRef<HTMLDivElement>(null);
   const [map, setMap] = useState<google.maps.Map | null>(null);
   const [directionsRenderer, setDirectionsRenderer] = useState<google.maps.DirectionsRenderer | null>(null);
@@ -68,7 +68,7 @@ const TravelRouteMap: React.FC<TravelRouteMapProps> = ({ origin, destination, tr
   const [error, setError] = useState<string | null>(null);
   const [directionsData, setDirectionsData] = useState<DirectionsResult | null>(null);
   const [showPanel, setShowPanel] = useState(false);
-  const [selectedMode, setSelectedMode] = useState<google.maps.TravelMode>(google.maps.TravelMode.TRANSIT);
+  const [selectedMode, setSelectedMode] = useState<string>('TRANSIT');
 
   useEffect(() => {
     if (!origin || !destination) {
@@ -83,6 +83,11 @@ const TravelRouteMap: React.FC<TravelRouteMapProps> = ({ origin, destination, tr
         const { Map } = await google.maps.importLibrary("maps") as google.maps.MapsLibrary;
         const { Marker } = await google.maps.importLibrary("marker") as google.maps.MarkerLibrary;
         if (!mapRef.current) return;
+
+        const modeEnum = selectedMode === 'DRIVING' ? google.maps.TravelMode.DRIVING :
+                         selectedMode === 'WALKING' ? google.maps.TravelMode.WALKING :
+                         selectedMode === 'BICYCLING' ? google.maps.TravelMode.BICYCLING :
+                         google.maps.TravelMode.TRANSIT;
 
         // Handle origin
         let originCoords: { lat: number; lng: number } | null = null;
@@ -121,10 +126,14 @@ const TravelRouteMap: React.FC<TravelRouteMapProps> = ({ origin, destination, tr
           destCoords = destination;
         }
 
-        let directions = await getDirections(originCoords, destCoords, selectedMode);
+        const modeEnum = selectedMode === 'DRIVING' ? google.maps.TravelMode.DRIVING :
+                         selectedMode === 'WALKING' ? google.maps.TravelMode.WALKING :
+                         selectedMode === 'BICYCLING' ? google.maps.TravelMode.BICYCLING :
+                         google.maps.TravelMode.TRANSIT;
+        let directions = await getDirections(originCoords, destCoords, modeEnum);
 
         // If Google Maps fails for transit, try our transit database
-        if (!directions && selectedMode === google.maps.TravelMode.TRANSIT) {
+        if (!directions && modeEnum === google.maps.TravelMode.TRANSIT) {
           console.log('Google Maps transit failed, trying local transit database...');
           directions = await getTransitInfo(originCoords, destCoords);
         }
@@ -142,7 +151,7 @@ const TravelRouteMap: React.FC<TravelRouteMapProps> = ({ origin, destination, tr
           const request: google.maps.DirectionsRequest = {
             origin: new google.maps.LatLng(originCoords.lat, originCoords.lng),
             destination: new google.maps.LatLng(destCoords.lat, destCoords.lng),
-            travelMode: selectedMode,
+            travelMode: modeEnum,
           };
 
           directionsService.route(request, (result, status) => {
